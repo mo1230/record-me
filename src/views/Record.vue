@@ -1,88 +1,112 @@
 <template>
-  <v-container>
-    <v-btn depressed @click="startRecord()">start</v-btn>
-    <v-btn depressed @click="stopRecord()">stop</v-btn>
+  <v-container class="m-video-container m-wh">
+    <video id="myVideo" ref="video" controls autoplay playsinline></video>
+    <br>
+    <div>
+      <v-btn ref="btnCapture" class="m-btn" depressed color="info" @click="startCapture()">Capture</v-btn>
+      <v-btn ref="btnStart" class="m-btn" depressed color="success" @click="startRecord()">start</v-btn>
+      <v-btn ref="btnStop" class="m-btn" depressed color="error" @click="stopRecord()">stop</v-btn>
+    </div>
+
   </v-container>
 </template>
 
 <script>
 import RecordRTC from 'recordrtc'
+// import videojs from 'video.js'
+// import {desktopCapturer} from 'electron'
+const {desktopCapturer, ipcRenderer} = window.require('electron')
+// import domify from 'domify'
+const domify = window.require('domify')
+const moment = window.require('moment')
 export default {
   name: "Record",
   data: function (){
     return {
       // stream:  navigator.mediaDevices.getUserMedia({video: true, audio: true}),
       recorder: null,
+      stream: null
 
     }
   },
   methods: {
-    startRecord: function () {
-      // navigator.mediaDevices.getUserMedia({video: true, audio: true})
-      // this.recorder = new RecordRTC.RecordRTCPromisesHandler(, {
-      //   type: 'video',
-      //   mimeType: "video/wav",
-
-        // recorderType: RecordRTC.WebAssemblyRecorder
-
-      const that = this
-
-      // navigator.mediaDevices.getDisplayMedia({ audio: true, video: true }).then(function (stream) 		{
-      //   // camera就是一个媒体流
-      //   that.recorder = RecordRTC(stream, {
-      //     type: 'video',
-      //     mimeType: "video/webm"
-      //   });
-      //   that.recorder.startRecording()
-      //   console.log("start   ", that.recorder)
-      // }).catch(function (error) {
-      //   // alert('Unable to capture your camera. Please check console logs.');
-      //   console.error(error)
-      // })
-      // })
-
-      // this.recorder.startRecording()
-
-      // const sleep = m => new Promise(r => setTimeout(r, m));
-      // await sleep(5000);
-      navigator.mediaDevices.getUserMedia({audio: true, video: true}).then(function (mediaStream) {
-        const config = {
-          mimeType: 'video/webm', // vp8, vp9, h264, mkv, opus/vorbis
-          audioBitsPerSecond : 256 * 8 * 1024,
-          videoBitsPerSecond : 256 * 8 * 1024,
-          bitsPerSecond: 256 * 8 * 1024,  // if this is provided, skip above two
-          checkForInactiveTracks: true,
-          timeSlice: 1000, // concatenate intervals based blobs
-          ondataavailable: function() {} // get intervals based blobs
-        }
-        that.recorder = new RecordRTC.MediaStreamRecorder(mediaStream, config);
-        that.recorder.record();
-
+    startCapture: function (){
+      ipcRenderer.send("show-picker", ["window","screen"])
+      ipcRenderer.on("source-id-selected", (event, id)=>{
+        console.log(id)
+        this.capture(id)
       })
-
+    },
+    startRecord: function () {
+      this.recorder = new RecordRTC(this.stream, { type: "video",mimeType: "video/webm; codecs=vp9" })
+      this.recorder.startRecording()
+      this.$refs.btnStart.disabled = true
+    },
+    handleStream: function (stream) {
+      const video = document.querySelector('video')
+      video.srcObject = stream
+      // video.src = window.URL.createObjectURL(stream)
+      video.onloadedmetadata = (e) => video.play()
 
     },
-    stopRecord: function () {
-      console.log(this.recorder)
-      // this.recorder.stopRecord()
-      // // this.recorder.save("1.mkv")
-      // let blob = this.recorder.getBlob();
-      // console.log("blog   ", blob)
-      // // RecordRTC.invokeSaveAsDialog(blob, "blob.mkv");
-      // // this.recorder.stopRecording();
-      const that = this
-      this.recorder.stop(function () {
-        // that.recorder.save("1")
+    handleError: function(e){
+      console.log(e)
+    },
+    capture: function(id){
+      desktopCapturer.getSources({ types: ['window', 'screen'] }).then(async sources => {
+        console.log(sources)
+        for (const source of sources) {
+          if (source.id === id) {
+            try {
+              this.stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                  mandatory: {
+                    chromeMediaSource: "desktop"
+                  }
+                },
+                video: {
+                  mandatory: {
+                    chromeMediaSource: 'desktop',
+                    chromeMediaSourceId: id,
+                    minWidth: 1280,
+                    maxWidth: 1280,
+                    minHeight: 720,
+                    maxHeight: 720
+                  }
+                }
+              })
+              this.handleStream(this.stream)
 
-        // let blob = that.recorder.getBlob()
-        let blob = that.recorder.blob
-        RecordRTC.invokeSaveAsDialog(blob, "filename.webm")
+            } catch (e) {
+              this.handleError(e)
+            }
+            return
+          }
+        }
       })
+    },
+    stopRecord: function () {
+      let that = this
+      this.recorder.stopRecording(function (blob) {
+        that.recorder.save(moment().format('YYYY-MM-DD HH:mm:ss') + "")
+      })
+      const video = document.querySelector('video')
+      video.srcObject = null
+      this.$refs.btnStart.disabled = false
     }
-  }
+  },
+
+
 }
 </script>
 
 <style scoped>
-
+  .m-video-container {
+    display: flex;
+    flex-direction: column;
+    justify-items: center;
+  }
+  .m-btn {
+    margin-right: 5px;
+  }
 </style>

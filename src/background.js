@@ -1,6 +1,6 @@
 'use strict'
 
-import { app, protocol, BrowserWindow } from 'electron'
+import { app, protocol, BrowserWindow, ipcMain, ipcRenderer} from 'electron'
 import { createProtocol } from 'vue-cli-plugin-electron-builder/lib'
 import installExtension, { VUEJS_DEVTOOLS } from 'electron-devtools-installer'
 const isDevelopment = process.env.NODE_ENV !== 'production'
@@ -10,19 +10,22 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { secure: true, standard: true } }
 ])
 
+let pickerDialog
+let win
 async function createWindow() {
   // Create the browser window.
-  const win = new BrowserWindow({
+  win = new BrowserWindow({
     width: 800,
     height: 600,
     webPreferences: {
-      
+
       // Use pluginOptions.nodeIntegration, leave this alone
       // See nklayman.github.io/vue-cli-plugin-electron-builder/guide/security.html#node-integration for more info
-      nodeIntegration: process.env.ELECTRON_NODE_INTEGRATION,
-      contextIsolation: !process.env.ELECTRON_NODE_INTEGRATION
+      nodeIntegration: true,   // process.env.ELECTRON_NODE_INTEGRATION
+      contextIsolation: false    // !process.env.ELECTRON_NODE_INTEGRATION
     }
   })
+
 
   if (process.env.WEBPACK_DEV_SERVER_URL) {
     // Load the url of the dev server if in development mode
@@ -31,10 +34,58 @@ async function createWindow() {
   } else {
     createProtocol('app')
     // Load the index.html when not in development
-    win.loadURL('app://./index.html')
+    await win.loadURL('app://./index.html')
+
   }
 }
 
+function creatPicher(){
+   pickerDialog = new BrowserWindow({
+    parent: win,
+    skipTaskbar: true,
+    modal: true,
+    show: false,
+    height: 390,
+    width: 680,
+     frame: false,
+     // closable:false,
+     maximizable: false,
+     webPreferences: {
+
+       // Use pluginOptions.nodeIntegration, leave this alone
+       // See nklayman.github.io/vue-cli-plugin-electron-builder/guide/security.html#node-integration for more info
+       nodeIntegration: true,   // process.env.ELECTRON_NODE_INTEGRATION
+       contextIsolation: false    // !process.env.ELECTRON_NODE_INTEGRATION
+     }
+  })
+
+       // `file://${__dirname}/app/index.html`   "../public/picker.html"
+  pickerDialog.loadURL(__dirname + "/../public/picker.html").then(function () {
+    pickerDialog.once("ready-to-show", ()=>{
+      // pickerDialog.maximize()
+      pickerDialog.show()
+    })
+  })
+  // pickerDialog.loadURL('../')
+
+}
+app.disableHardwareAcceleration()
+
+ipcMain.on('show-picker', (event, options) => {
+  console.log(`${__dirname}`)
+  creatPicher()
+  // pickerDialog.show()
+  pickerDialog.webContents.send("get-sources", options)
+  console.log(pickerDialog)
+
+  console.log("get-sources")
+})
+
+ipcMain.on('source-id-selected', (event, sourceId) => {
+  pickerDialog.close()
+  win.webContents.send('source-id-selected', sourceId)
+
+})
 // Quit when all windows are closed.
 app.on('window-all-closed', () => {
   // On macOS it is common for applications and their menu bar
@@ -79,3 +130,6 @@ if (isDevelopment) {
     })
   }
 }
+
+
+
